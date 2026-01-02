@@ -3,25 +3,162 @@ from ripser import ripser
 import gudhi as gd
 from persim import plot_diagrams
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter, FFMpegWriter
+from matplotlib.animation import FuncAnimation, FFMpegWriter
 
 
 MAX_RANGE = np.sqrt(2)
 # randomly generate points
 def random_points(N):
+    """
+    Generates random 2D point cloud inside the unit square with N points.
+
+    Parameters
+    ----------
+    N : int
+        Number of points to generate.
+
+    Returns
+    -------
+    ndarray of shape (N, 2)
+        A randomly generate point cloud.
+
+    """
     return np.random.rand(N, 2)
 def plot_points(points, show=True):
+    """
+    Plot a 2D point cloud.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Point positions.
+    show : bool, optional
+        If True (default), display the plot using plt.show().
+        If False, the plot is created but not shown.
+
+    Returns
+    -------
+    None
+    """
     plt.plot(points[:, 0], points[:, 1], '.', color='black')
     if show:
         plt.show()
 # compute and plot the persitance diagram of the points
 def persistance_diagram(points):
+    """
+    Calculate the persistance diagram of the given poin cloud via the Rips filtration.
+    
+    Parameters
+    ----------
+        points : ndarray of shape (N, 2)
+            Starting point positions.
+            
+    Returns
+    -------
+    list of ndarray
+        Persistence diagrams for each homology dimension.
+        result[0] corresponds to H0, result[1] to H1.
+    """
     result = ripser(points, maxdim=1)
     return result['dgms']
 def plot_diagram(diagram, max_val=MAX_RANGE):
-    plot_diagrams(diagram, xy_range=[0, max_val, 0, max_val])
+    """
+    Plot a persistence diagram with fixed axis bounds.
 
+    Parameters
+    ----------
+    diagram : list of ndarray
+        Persistence diagrams as returned by ripser, one array per homology dimension.
+    max_val : float, optional
+        Maximum value for both birth and death axes. Defaults to MAX_RANGE.
+
+    Returns
+    -------
+    None
+    """
+    plot_diagrams(diagram, xy_range=[0, max_val, 0, max_val])
+    
+def persistance_diagram_anim(points, iter_func, repeat_count, file, duration, max_val=MAX_RANGE):
+    """
+    Animate the evolution of a persistence diagram under an iterative point update.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Initial point cloud.
+    iter_func : callable
+        Function iter_func(points, frame) -> updated points.
+    repeat_count : int
+        Number of animation frames.
+    file : str
+        Output animation filename (e.g. "diagram.mp4").
+    duration : float
+        Total animation duration in seconds.
+    max_val : float, optional
+        Maximum birth/death value for axis limits.
+
+    Returns
+    -------
+    None
+    """
+    fig, ax = plt.subplots()
+    ax.set_xlim(0, max_val)
+    ax.set_ylim(0, max_val)
+    ax.set_aspect("equal")
+    ax.set_title("Rips Filtration")
+    
+    ax.plot([0, max_val], [0, max_val], '--', color='black', alpha=0.4, linewidth=1)
+    
+    scat_h0 = ax.scatter([], [], c="blue", label="H0")
+    scat_h1 = ax.scatter([], [], c="orange", label="H1")
+    ax.legend(loc="upper left")
+    
+    points = points.copy()
+    
+    def update(frame):
+        nonlocal points
+        if frame % 100 == 0:
+            print(frame, '/', repeat_count)
+        
+        diagram = persistance_diagram(points)
+        # iterater after drowing once, to still draw the starting frame
+        points = iter_func(points, frame) 
+        
+        if len(diagram[0]) > 0:
+            scat_h0.set_offsets(diagram[0])
+        else:
+            scat_h0.set_offsets(np.empty((0, 2)))
+            
+        if len(diagram) > 0 and len(diagram[1]) > 0:
+            scat_h1.set_offsets(diagram[1])
+        else:
+            scat_h1.set_offsets(np.empty((0, 2)))
+        
+        ax.set_title(f"Persistance diagram ≤ {frame}")
+        return scat_h0, scat_h1
+    
+    anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
+    anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
+    
 def rips_anim_steps(points, file, duration):
+    """
+    Animate the Rips filtration by stepping through discrete filtration values.
+
+    Edges and triangles appear at their filtration time, and balls grow in steps.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Point cloud from which a simplicial complex is built.
+    file : str
+        Output animation filename (e.g. "rips_steps.mp4").
+    duration : float
+        Total animation duration in seconds.
+
+    Returns
+    -------
+    None
+    """
     rips = gd.RipsComplex(points=points, max_edge_length=MAX_RANGE)
     simplex_tree = rips.create_simplex_tree(max_dimension=2)
     simplices = list(simplex_tree.get_filtration())
@@ -85,6 +222,25 @@ def rips_anim_steps(points, file, duration):
     anim.save(file, writer=FFMpegWriter(fps=len(filtration_values) / duration))
     
 def rips_anim_smooth(points, file, duration):
+    """
+    Animate the Rips filtration with smooth ball growth.
+
+    Balls grow continuously, and simplices appear when their filtration
+    threshold is reached.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Point cloud from which a simplicial complex is built.
+    file : str
+        Output animation filename (e.g. "rips_steps.mp4").
+    duration : float
+        Total animation duration in seconds.
+
+    Returns
+    -------
+    None
+    """
     rips = gd.RipsComplex(points=points, max_edge_length=MAX_RANGE)
     simplex_tree = rips.create_simplex_tree(max_dimension=2)
     simplices = list(simplex_tree.get_filtration())
@@ -151,4 +307,6 @@ def rips_anim_smooth(points, file, duration):
     anim = FuncAnimation(fig, update, frames=len(filtration_values), interval=400)
     anim.save(file, writer=FFMpegWriter(fps=len(filtration_values) / duration))
     
+
+#persistance_diagram_anim(random_points(30), lambda x, _: x*0.9, 10, "persistance_diagram.mp4", 10)
 #rips_anim_smooth(random_points(30), "rips_filtration_smooth.mp4", 10)
