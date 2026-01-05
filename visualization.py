@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 
 
-MAX_RANGE = np.sqrt(2)
+MAX_RANGE = np.sqrt(3)
 # randomly generate points
 def random_points(N):
     """
@@ -41,10 +41,13 @@ def plot_points(points, show=True):
     None
     """
     plt.plot(points[:, 0], points[:, 1], '.', color='black')
+    plt.xlim(-1, 1)
+    plt.ylim(-1, 1)
+    plt.axis('equal')
     if show:
         plt.show()
 # compute and plot the persitance diagram of the points
-def persistance_diagram(points):
+def persistence_diagram(points):
     """
     Calculate the persistance diagram of the given poin cloud via the Rips filtration.
     
@@ -78,7 +81,7 @@ def plot_diagram(diagram, max_val=MAX_RANGE):
     """
     plot_diagrams(diagram, xy_range=[0, max_val, 0, max_val])
     
-def persistance_diagram_anim(points, iter_func, repeat_count, file, duration, max_val=MAX_RANGE):
+def persistence_diagram_anim(points, iter_func, repeat_count, file, duration, max_val=MAX_RANGE):
     """
     Animate the evolution of a persistence diagram under an iterative point update.
 
@@ -111,7 +114,7 @@ def persistance_diagram_anim(points, iter_func, repeat_count, file, duration, ma
     
     scat_h0 = ax.scatter([], [], c="blue", label="H0")
     scat_h1 = ax.scatter([], [], c="orange", label="H1")
-    ax.legend(loc="upper left")
+    ax.legend(loc="lower right")
     
     points = points.copy()
     
@@ -120,7 +123,7 @@ def persistance_diagram_anim(points, iter_func, repeat_count, file, duration, ma
         if frame % 100 == 0:
             print(frame, '/', repeat_count)
         
-        diagram = persistance_diagram(points)
+        diagram = persistence_diagram(points)
         # iterater after drowing once, to still draw the starting frame
         points = iter_func(points, frame) 
         
@@ -134,12 +137,59 @@ def persistance_diagram_anim(points, iter_func, repeat_count, file, duration, ma
         else:
             scat_h1.set_offsets(np.empty((0, 2)))
         
-        ax.set_title(f"Persistance diagram ≤ {frame}")
+        ax.set_title(f"Persistence diagram ≤ {frame}")
         return scat_h0, scat_h1
     
     anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
     anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
     
+def point_cloud_anim(points, iter_func, repeat_count, file, duration):
+    """
+    Animate the evolution of a point cloud under an iterative point update.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Initial point cloud.
+    iter_func : callable
+        Function iter_func(points, frame) -> updated points.
+    repeat_count : int
+        Number of animation frames.
+    file : str
+        Output animation filename (e.g. "point_cloud.mp4").
+    duration : float
+        Total animation duration in seconds.
+
+    Returns
+    -------
+    None
+    """
+    fig, ax = plt.subplots()
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1, 1)
+    ax.set_aspect("equal")
+    ax.set_title("Rips Filtration")
+    
+    scat = ax.scatter([], [], c="blue", label="Points")
+    ax.legend(loc="lower right")
+    
+    points = points.copy()
+    
+    def update(frame):
+        nonlocal points
+        if frame % 100 == 0:
+            print(frame, '/', repeat_count)
+        
+        scat.set_offsets(points)
+        
+        # iterater after drowing once, to still draw the starting frame
+        points = iter_func(points, frame) 
+        
+        ax.set_title(f"Point cloud {frame}")
+        return scat
+    
+    anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
+    anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
 def rips_anim_steps(points, file, duration):
     """
     Animate the Rips filtration by stepping through discrete filtration values.
@@ -308,5 +358,5 @@ def rips_anim_smooth(points, file, duration):
     anim.save(file, writer=FFMpegWriter(fps=len(filtration_values) / duration))
     
 
-#persistance_diagram_anim(random_points(30), lambda x, _: x*0.9, 10, "persistance_diagram.mp4", 10)
+#persistence_diagram_anim(random_points(30), lambda x, _: x*0.9, 10, "persistance_diagram.mp4", 10)
 #rips_anim_smooth(random_points(30), "rips_filtration_smooth.mp4", 10)
