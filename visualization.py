@@ -81,7 +81,7 @@ def plot_diagram(diagram, max_val=MAX_RANGE):
     """
     plot_diagrams(diagram, xy_range=[0, max_val, 0, max_val])
     
-def persistence_diagram_anim(points, iter_func, repeat_count, file, duration, max_val=MAX_RANGE):
+def persistence_diagram_anim(points, iter_func, repeat_count, file, duration, max_val=MAX_RANGE, extra_param=None):
     """
     Animate the evolution of a persistence diagram under an iterative point update.
 
@@ -120,12 +120,16 @@ def persistence_diagram_anim(points, iter_func, repeat_count, file, duration, ma
     
     def update(frame):
         nonlocal points
+        nonlocal extra_param
         if frame % 100 == 0:
             print(frame, '/', repeat_count)
         
         diagram = persistence_diagram(points)
         # iterater after drowing once, to still draw the starting frame
-        points = iter_func(points, frame) 
+        if extra_param is None:
+            points = iter_func(points, frame) 
+        else:
+            points, extra_param = iter_func(points, extra_param, frame)
         
         if len(diagram[0]) > 0:
             scat_h0.set_offsets(diagram[0])
@@ -143,7 +147,7 @@ def persistence_diagram_anim(points, iter_func, repeat_count, file, duration, ma
     anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
     anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
     
-def point_cloud_anim(points, iter_func, repeat_count, file, duration):
+def point_cloud_anim(points, iter_func, repeat_count, file, duration, centroids=None):
     """
     Animate the evolution of a point cloud under an iterative point update.
 
@@ -171,22 +175,29 @@ def point_cloud_anim(points, iter_func, repeat_count, file, duration):
     ax.set_title("Rips Filtration")
     
     scat = ax.scatter([], [], c="blue", label="Points")
+    if centroids is not None:
+        scat_cent = ax.scatter([], [], c="orange", label="Centroids")
     ax.legend(loc="lower right")
     
     points = points.copy()
     
     def update(frame):
         nonlocal points
+        nonlocal centroids
         if frame % 100 == 0:
             print(frame, '/', repeat_count)
         
         scat.set_offsets(points)
+        ax.set_title(f"Point cloud {frame}")
         
         # iterater after drowing once, to still draw the starting frame
-        points = iter_func(points, frame) 
-        
-        ax.set_title(f"Point cloud {frame}")
-        return scat
+        if centroids is None:
+            points = iter_func(points, frame) 
+            return scat
+        else:
+            scat_cent.set_offsets(centroids)
+            points, centroids = iter_func(points, centroids, frame)
+            return scat, scat_cent
     
     anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
     anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))

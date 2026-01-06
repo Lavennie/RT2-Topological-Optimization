@@ -4,10 +4,11 @@ from visualization import *
 
 BLOAT_STEP = 0.01
 SPREAD_STEP = 0.01
-DRIFT_STEP = 0.01
-points = circle_noise(100)
-plot_points(points)
+DRIFT_STEP = 0.1
 
+def random_vector(length):
+    angle = np.random.uniform(0, 2 * np.pi)
+    return np.array([np.cos(angle), np.sin(angle)]) * length
 def move_towards_vec(current, target, max_distance_delta):
     current = np.asarray(current, dtype=float)
     target = np.asarray(target, dtype=float)
@@ -33,11 +34,14 @@ def bloat(centroid, points):
     max_bloat = np.min([centroid[0] + 1, 1 - centroid[0], centroid[1] + 1, 1 - centroid[1]])
     from_center = points - centroid
     lengths = np.linalg.norm(from_center, axis=1)
-    targets = from_center / lengths[:, None] * max_bloat
+    mask = lengths > 0
+    targets = np.empty_like(points)
+    targets[mask] = from_center / lengths[:, None] * max_bloat
+    targets[~mask] = points[~mask]
     return centroid + move_towards(from_center, targets, BLOAT_STEP)
-def closest_points(source, points):
+def closest_points(source, points, k):
     distances = np.linalg.norm(points - source, axis=1)
-    nearest_indices = np.argpartition(distances, 2)[:2]
+    nearest_indices = np.argpartition(distances, 2)[:k]
     return points[nearest_indices]
 def signed_angle(a, b):
     """
@@ -78,7 +82,7 @@ def rotate_vector_2d(v, angle_deg):
 def spread(centroid, points):
     res = np.empty_like(points)
     for i in range(len(points)):
-        closest = closest_points(points[i, :], np.delete(points, i, axis=0))
+        closest = closest_points(points[i, :], np.delete(points, i, axis=0), 2)
         ca = closest[0, :] - centroid
         cb = closest[1, :] - centroid
         cp = points[i, :] - centroid
@@ -95,19 +99,79 @@ def spread(centroid, points):
         res[i, :] = move_towards_vec(points[i, :], target_pos, SPREAD_STEP)
     return res
 def drift(centroids):
-    if len(centroids == 1):
+    if len(centroids) == 1:
         return np.array([move_towards_vec(centroids[0, :], np.array([0, 0]), DRIFT_STEP)])
     else:
-        return centroids
+        result = np.empty_like(centroids)
+        for i in range(len(centroids)):
+            c = centroids[i, :]
+            if c[1] >= c[0] and c[1] >= -c[0]: # top wall
+                wall = np.array([c[0], 1])
+            elif c[1] < c[0] and c[1] < -c[0]: # bottom wall
+                wall = np.array([c[0], -1])
+            elif c[1] >= c[0] and c[1] < -c[0]: # left wall
+                wall = np.array([-1, c[1]])
+            else: # right wall
+                wall = np.array([1, c[1]])
+            other = np.vstack((wall, np.delete(centroids, i, axis=0)))
+            from_other = c - other
+            from_other[0, :] *= 2
+            dists = np.linalg.norm(from_other, axis=1)
+            t =  np.sin(2 * np.atan2(c[1], c[0])) ** 4 
+            from_other[0, :] = (1 - t) * from_other[0, :] + t * normalize(-c) * dists[0] # combination of direction directly from wall and toward center
+            #from_other[0, :] = normalize(-c) * dists[0] # wall direction toward center
+            mask = dists > 0
+            weight = (dists[mask] * dists[mask])[:, None]
+            change = (from_other / weight).mean(axis=0)
+            #change += random_vector(DRIFT_STEP / 10)
+            result[i, :] = np.clip(c + change * DRIFT_STEP, -1, 1)
+        return result
+def get_centroids(points, N):
+    rips = gd.RipsComplex(points=points, max_edge_length=MAX_RANGE)
+    simplex_tree = rips.create_simplex_tree(max_dimension=2)
+    simplex_tree.compute_persistence()
+
+    pairs = simplex_tree.persistence_pairs()
+
+    # get all the hole birth-death simplices
+    holes = []
+    for (birth_sx, death_sx) in pairs:
+        if (len(death_sx) == 3 and death_sx is not None):
+            holes.append((birth_sx, death_sx))
+    def distance(v1, v2):
+        return np.linalg.norm(v1 - v2)
+    def sort_key(vertex_indices):
+        vertices = points[vertex_indices[1]]
+        return max(distance(vertices[0, :], vertices[1, :]), distance(vertices[1, :], vertices[2, :]), distance(vertices[2, :], vertices[0, :]))
+
+    # get the holes with the biggest death simplices
+    holes.sort(key=sort_key, reverse=True)
+    # take the first N holes and calculate their centroid
+    centroids = []
+    for i in range(N):
+        centroids.append(points[holes[i][1]].mean(axis=0))
+    return np.array(centroids)
+def cluster(points, centroids):
+    assignment = np.empty(len(points))
+    for i in range(len(points)):
+        dists = np.linalg.norm(centroids - points[i, :], axis=1)
+        nearest_index = np.argmin(dists)
+        assignment[i] = nearest_index
+    return assignment
         
-def effervescence(points, frame):
-    global centroids
+def effervescence(points, centroids, frame):
+    global clustering
     centroids = drift(centroids)
-    return spread(centroids[0, :], bloat(centroids[0, :], points))
+    for i in range(len(centroids)):
+        mask = clustering == i
+        points[mask] = spread(centroids[i, :], bloat(centroids[i, :], points[mask]))
+    return points, centroids
 
-centroids = np.array([[0.6, -0.3]])
+centroid_count = 2
+points = infinity_noise(100)
+centroids = get_centroids(points, centroid_count)
+clustering = cluster(points, centroids)
 plot_points(points)
-func = lambda x, _: spread(centroids[0, :], bloat(centroids[0, :], x))
 
-point_cloud_anim(points, effervescence, 100, "point_cloud.mp4", 5)
-persistence_diagram_anim(points, effervescence, 100, "persistence_diagram.mp4", 10)
+point_cloud_anim(points, effervescence, 100, "point_cloud.mp4", 5, centroids=centroids)
+persistence_diagram_anim(points, effervescence, 100, "persistence_diagram.mp4", 10, extra_param=centroids)
