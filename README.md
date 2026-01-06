@@ -9,10 +9,12 @@ You can use the following commands for setting up the conda env with the needed 
 ```sh
 conda create -n topological-optimization python=3.13 numpy scipy -y
 conda activate topological-optimization
-pip install ripser
+conda install -c conda-forge ripser
+conda install -c conda-forge gudhi
 ```
 
 > [!NOTE]
 > Note: `ripser` might not be available in the default conda channels, so it's installed via pip.
 >
+
 ## Code structure
