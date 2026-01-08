@@ -2,14 +2,23 @@ import numpy as np
 import gudhi
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import cdist
-
+from shapes import *
+from visualization import *
 
 class TopologicalOptimizer:
-    def __init__(self, points, learning_rate=0.01, momentum=0.9):
+    def __init__(self, points, learning_rate=0.01, momentum=0.9, extend=True, round_robin=False, target_cloud=None):
         self.points = points.astype(np.float64)
         self.lr = learning_rate
         self.momentum = momentum
         self.velocity = np.zeros_like(points)
+        self.extend = extend
+        self.round_robin = round_robin
+        self.feature_index = 0
+        diagrams = persistence_diagram(target_cloud)[1]
+        diagrams = np.array([
+            (death - birth, birth, death) for birth, death in diagrams
+        ])
+        self.target_persistence = diagrams#self.significant_features(diagrams)
 
     def get_gradient_vector(self, p1, p2):
         """
@@ -21,6 +30,21 @@ class TopologicalOptimizer:
         if dist < 1e-8:
             return np.zeros_like(diff), dist  # Handle coincident points safely
         return diff / dist, dist
+    def sort_persistences(self, persistences):
+        return persistences[np.argsort(persistences[:, 0])[::-1]]
+
+    def significant_features(self, persistences):
+        """
+        Features (their values) that live long enough sorted by their lifetime from longer to shorter.
+        """
+        return self.sort_persistences(persistences[persistences[:, 0] > 0.1])
+    def largest_features(self, persistences, k):
+        """
+        The top k features that survive the longest.
+        """
+        if len(persistences) < k:
+            return persistences
+        return persistences[np.argpartition(persistences[:, 0], 0)[-k:]]
 
     def optimize_rips_topology(self, points, epochs=50, lr=0.02):
         """
@@ -47,11 +71,39 @@ class TopologicalOptimizer:
                 points += np.random.normal(0, 0.01, points.shape)
                 continue
 
-            # Find the most persistent feature
-            persistences = [
+            # Find the most persistent feature or pick the significant ones in 
+            persistences = np.array([
                 (death - birth, birth, death) for birth, death in h1_features
-            ]
-            max_pers, birth_time, death_time = max(persistences, key=lambda x: x[0])
+            ])
+            # 
+            if self.target_persistence is not None:
+                if len(self.target_persistence) == 0:
+                    raise Exception("Target persistence does not have any significant features.")
+                # These will be transformed in to the target features in a round robin style
+                persistences = self.sort_persistences(persistences)
+                #largest = self.largest_features(persistences, len(self.target_persistence))
+                #self.feature_index = self.feature_index % len(persistences) # Loop around back to the first feature
+                self.feature_index = np.random.randint(0, len(persistences))
+                max_pers, birth_time, death_time = persistences[self.feature_index, :]
+                if self.feature_index < len(self.target_persistence): # feature to transform into one of the reference features
+                    # Choose whether to shorten or lengthen the feature
+                    self.extend = max_pers < self.target_persistence[self.feature_index, 0]
+                else:
+                    # Contract any other holes that exist
+                    self.extend = False
+                    
+                #max_pers, birth_time, death_time = largest[np.argpartition(largest[:, 0], 0)[-self.feature_index - 1], :]
+                self.feature_index += 1
+            elif self.round_robin:
+                # Modify only significant features swapping among them in a round robin fashion
+                significant = self.significant_features(persistences) # 0.1 is some arbitrary cutoff
+                if len(significant) == 0:
+                    significant = np.array([persistences[0, :]]) # Just take one diagram randomly and modify it
+                self.feature_index = self.feature_index % len(significant) # Loop around back to the first feature
+                max_pers, birth_time, death_time = significant[np.argpartition(significant[:, 0], 0)[-self.feature_index - 1], :]
+                self.feature_index += 1
+            else:
+                max_pers, birth_time, death_time = max(persistences, key=lambda x: x[0])
 
             # Find edges at birth and death times
             # Get all edges (1-simplices) from the filtration
@@ -83,18 +135,22 @@ class TopologicalOptimizer:
 
             grad_accum = np.zeros_like(points)
 
+            direction = 1 if self.extend else -1
             # Minimize Birth (contract birth edge)
             dir_b, dist_b = self.get_gradient_vector(points[bu], points[bv])
-            grad_accum[bu] -= dir_b  # Move towards bv
-            grad_accum[bv] += dir_b  # Move towards bu
+            grad_accum[bu] -= dir_b * direction  # Move towards bv
+            grad_accum[bv] += dir_b * direction  # Move towards bu
 
             # Maximize Death (expand death edge)
             dir_d, dist_d = self.get_gradient_vector(points[du], points[dv])
-            grad_accum[du] += dir_d  # Move away from dv
-            grad_accum[dv] -= dir_d  # Move away from du
+            grad_accum[du] += dir_d * direction  # Move away from dv
+            grad_accum[dv] -= dir_d * direction  # Move away from du
 
             # Apply updates
             points += lr * grad_accum
+            
+            # Clamp the point positions to [-1,1]
+            points = np.clip(points, -1, 1)
 
             if epoch % 10 == 0:
                 print(f"Epoch {epoch}: Max Persistence = {max_pers:.4f}")
@@ -136,6 +192,8 @@ def visualize_step(points, birth_edge, death_edge, epoch, title="Optimization"):
 
     ax[0].legend(loc="upper right")
     ax[0].axis("equal")
+    ax[0].set_xlim(-1, 1)
+    ax[0].set_ylim(-1, 1)
 
     # We re-compute just to show the current state
     rc = gudhi.RipsComplex(points=points)
@@ -161,22 +219,27 @@ def visualize_step(points, birth_edge, death_edge, epoch, title="Optimization"):
             label="Target Feature",
         )
 
+    ax[1].plot([0, np.sqrt(3)], [0, np.sqrt(3)], '--', color='black', alpha=0.4, linewidth=1)
     ax[1].set_title("Persistence Diagram (H1)")
     ax[1].set_xlabel("Birth")
     ax[1].set_ylabel("Death")
+    ax[1].set_xlim(0, np.sqrt(3))
+    ax[1].set_ylim(0, np.sqrt(3))
     ax[1].legend()
 
     plt.tight_layout()
     plt.show()
 
-
 if __name__ == "__main__":
     np.random.seed(42)
-    points = np.random.random((50, 2))
+    #points = np.random.random((50, 2))
+    points = circle_noise(100)
+    reference = infinity_noise(100)
+    plot_diagram(persistence_diagram(reference))
 
-    opt = TopologicalOptimizer(points, learning_rate=0.05)
+    opt = TopologicalOptimizer(points, learning_rate=0.5, extend=False, round_robin=True, target_cloud=reference)
 
     print("Starting optimization...")
-    target_info = opt.optimize_rips_topology(points=points, epochs=100)
+    target_info = opt.optimize_rips_topology(points=points, epochs=1000)
 
     print("Done.")
