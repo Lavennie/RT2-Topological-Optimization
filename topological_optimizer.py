@@ -161,16 +161,29 @@ class TopologicalOptimizer:
 
             grad_accum = np.zeros_like(points)
 
-            direction = 1 if self.extend else -1
-            # Minimize Birth (contract birth edge)
-            dir_b, dist_b = self.get_gradient_vector(points[bu], points[bv])
-            grad_accum[bu] -= dir_b * direction  # Move towards bv
-            grad_accum[bv] += dir_b * direction  # Move towards bu
+            if self.extend:
+                # Target Feature: Linear force
+                force_magnitude = 1.0
+                direction = 1
+            else:
+                # Noise Feature: Square force (scale by persistence)
+                current_persistence = death_time - birth_time
+                force_magnitude = 2.0 * current_persistence
+                direction = -1
 
-            # Maximize Death (expand death edge)
+            # Birth Edge Update
+            dir_b, dist_b = self.get_gradient_vector(points[bu], points[bv])
+            # If direction is 1 (target): contract birth (move bu -> bv)
+            # If direction is -1 (noise): expand birth (move bu <- bv)
+            grad_accum[bu] -= dir_b * direction * force_magnitude
+            grad_accum[bv] += dir_b * direction * force_magnitude
+
+            # Death Edge Update
             dir_d, dist_d = self.get_gradient_vector(points[du], points[dv])
-            grad_accum[du] += dir_d * direction  # Move away from dv
-            grad_accum[dv] -= dir_d * direction  # Move away from du
+            # If direction is 1 (target): expand death (move du <- dv)
+            # If direction is -1 (noise): contract death (move du -> dv)
+            grad_accum[du] += dir_d * direction * force_magnitude
+            grad_accum[dv] -= dir_d * direction * force_magnitude
 
             # Apply updates
             points += lr * grad_accum
