@@ -57,7 +57,7 @@ class TopologicalOptimizer:
             return persistences
         return persistences[np.argpartition(persistences[:, 0], 0)[-k:]]
 
-    def optimize_rips_topology(self, points, epochs=50, lr=0.02):
+    def optimize_rips_topology(self, points, homology_group_dim=1, epochs=50, lr=0.02):
         """
         Optimizes the point cloud to prolong the dominant H1 feature.
         Includes intermediate visualizations.
@@ -85,7 +85,7 @@ class TopologicalOptimizer:
 
             # Find the most persistent feature or pick the significant ones in
             persistences = np.array(
-                [(death - birth, birth, death) for birth, death in h1_features]
+                [(death - birth, birth, death) for birth, death in hk_features]
             )
             #
             if self.target_persistence is not None:
@@ -275,6 +275,8 @@ if __name__ == "__main__":
     )
 
     print("Starting optimization...")
-    target_info = opt.optimize_rips_topology(points=points, epochs=1000)
+    target_info = opt.optimize_rips_topology(
+        points=points, homology_group_dim=1, epochs=1000
+    )
 
     print("Done.")
