@@ -22,34 +22,35 @@ class TopologicalOptimizer:
             return np.zeros_like(diff), dist  # Handle coincident points safely
         return diff / dist, dist
 
-    def optimize_rips_topology(self, points, epochs=50, lr=0.02):
+    def optimize_rips_topology(self, points, homology_group_dim=1, epochs=50, lr=0.02):
         """
         Optimizes the point cloud to prolong the dominant H1 feature.
         Includes intermediate visualizations.
         """
+        if homology_group_dim < 0:
+            raise ValueError("Homology group dimension must be >= 0")
         print("Starting Optimization...")
 
         for epoch in range(epochs):
             rc = gudhi.RipsComplex(points=points)
             st = rc.create_simplex_tree(max_dimension=2)
-            st.compute_persistence()
 
-            # Get persistence pairs for H1
+            # Get persistence pairs for H_k
             persistence = st.persistence()
-            h1_features = [
+            hk_features = [
                 (birth, death)
                 for dim, (birth, death) in persistence
-                if dim == 1 and death != float("inf")
+                if dim == homology_group_dim and death != float("inf")
             ]
 
-            if len(h1_features) == 0:
+            if len(hk_features) == 0:
                 print(f"Epoch {epoch}: No H1 features found. Adding noise.")
                 points += np.random.normal(0, 0.01, points.shape)
                 continue
 
             # Find the most persistent feature
             persistences = [
-                (death - birth, birth, death) for birth, death in h1_features
+                (death - birth, birth, death) for birth, death in hk_features
             ]
             max_pers, birth_time, death_time = max(persistences, key=lambda x: x[0])
 
@@ -177,6 +178,6 @@ if __name__ == "__main__":
     opt = TopologicalOptimizer(points, learning_rate=0.05)
 
     print("Starting optimization...")
-    target_info = opt.optimize_rips_topology(points=points, epochs=100)
+    target_info = opt.optimize_rips_topology(points=points, epochs=101)
 
     print("Done.")
