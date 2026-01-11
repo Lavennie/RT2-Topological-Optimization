@@ -1,53 +1,12 @@
 import numpy as np
-from ripser import ripser
 import gudhi as gd
 from persim import plot_diagrams
+from ripser import ripser
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 
-
 MAX_RANGE = np.sqrt(3)
-# randomly generate points
-def random_points(N):
-    """
-    Generates random 2D point cloud inside the unit square with N points.
-
-    Parameters
-    ----------
-    N : int
-        Number of points to generate.
-
-    Returns
-    -------
-    ndarray of shape (N, 2)
-        A randomly generate point cloud.
-
-    """
-    return np.random.rand(N, 2)
-def plot_points(points, show=True):
-    """
-    Plot a 2D point cloud.
-
-    Parameters
-    ----------
-    points : ndarray of shape (N, 2)
-        Point positions.
-    show : bool, optional
-        If True (default), display the plot using plt.show().
-        If False, the plot is created but not shown.
-
-    Returns
-    -------
-    None
-    """
-    plt.plot(points[:, 0], points[:, 1], '.', color='black')
-    print(1)
-    plt.xlim(-1, 1)
-    plt.ylim(-1, 1)
-    plt.gca().set_aspect('equal', adjustable='box')
-    if show:
-        plt.show()
-# compute and plot the persitance diagram of the points
+# compute the persitance diagram of the points
 def persistence_diagram(points):
     """
     Calculate the persistance diagram of the given poin cloud via the Rips filtration.
@@ -65,6 +24,28 @@ def persistence_diagram(points):
     """
     result = ripser(points, maxdim=1)
     return result['dgms']
+def plot_points(points, show=True):
+    """
+    Plot a 2D point cloud.
+
+    Parameters
+    ----------
+    points : ndarray of shape (N, 2)
+        Point positions.
+    show : bool, optional
+        If True (default), display the plot using plt.show().
+        If False, the plot is created but not shown.
+
+    Returns
+    -------
+    None
+    """
+    plt.plot(points[:, 0], points[:, 1], '.', color='black')
+    plt.xlim(-1, 1)
+    plt.ylim(-1, 1)
+    plt.gca().set_aspect('equal', adjustable='box')
+    if show:
+        plt.show()
 def plot_diagram(diagram, max_val=MAX_RANGE):
     """
     Plot a persistence diagram with fixed axis bounds.
@@ -241,6 +222,7 @@ def point_cloud_persistence_anim(points, iter_func, repeat_count, file, duration
     -------
     None
     """
+    history = []
     
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     ax[0].set_title("Point Cloud")  
@@ -313,6 +295,8 @@ def point_cloud_persistence_anim(points, iter_func, repeat_count, file, duration
     
     anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
     anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
+    plt.show()
+    return points
     
 def rips_anim_steps(points, file, duration):
     """

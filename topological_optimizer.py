@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.distance import cdist
 from shapes import *
 from visualization import *
+from distances import *
 
 
 class TopologicalOptimizer:
@@ -303,8 +304,6 @@ if __name__ == "__main__":
     points = circle_noise(100)
     reference = infinity_noise(100)
     
-    plot_diagram(persistence_diagram(reference))
-
     opt = TopologicalOptimizer(
         points,
         learning_rate=0.02,
@@ -313,9 +312,15 @@ if __name__ == "__main__":
         target_cloud=reference,
         homology_group_dim=-1
     )
-    point_cloud_persistence_anim(points, opt.optimize_rips_iterator, 50, "point_cloud.mp4", 20, extra_param=[], extra_display="birth death")
-
-    print("Starting optimization...")
+    final_points = point_cloud_persistence_anim(points, opt.optimize_rips_iterator, 50, "point_cloud.mp4", 20, extra_param=[], extra_display="birth death")
+    
+    np.save("start_points.npy", points)
+    np.save("target_points.npy", reference)
+    np.save("optimized.npy", final_points)
+    print(hausdorff_distance(reference, final_points))
+    print(bottleneck_distance(reference, final_points))
+    
+    #print("Starting optimization...")
     #target_info = opt.optimize_rips_topology(
     #    points=points, epochs=500
     #)
