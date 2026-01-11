@@ -7,14 +7,22 @@ For setting up the code environment we suggest using conda, as it is the most co
 You can use the following commands for setting up the conda env with the needed dependencies:
 
 ```sh
-conda create -n topological-optimization python=3.13 numpy scipy -y
+conda create -n topological-optimization python=3.13 numpy scipy matplotlib.pyplot persim -y
 conda activate topological-optimization
-conda install -c conda-forge ripser
 conda install -c conda-forge gudhi
+pip install ripser
 ```
 
-> [!NOTE]
-> Note: `ripser` might not be available in the default conda channels, so it's installed via pip.
->
+> [!Note]
+> `ripser` might not be available in the default conda channels, so it's installed via pip.
+> Although the code uses gudhi for computing the Rips complex, ripser contains a valuable function for plotting the persistence diagram.
 
 ## Code structure
+
+The file `topological_optimizer.py` is the main part of the code and contains the algorithm for gradient descent feature manipulation, as well as the optimization towards a targed signature.
+
+The rest of the files contain either helper methods and structures or visualizations.
+
+## Animations
+
+The animations we obtained in our research are available in the `animations` folder.
