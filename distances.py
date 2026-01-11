@@ -23,12 +23,19 @@ def bottleneck_distance(cloud1, cloud2):
 
 
 if __name__ == "__main__":
-    start_points = np.load("start_points.npy")
-    final_points = np.load("optimized.npy")
-    reference = np.load("target_points.npy")
+    prefix = "bubble_circle_"
+    start_points = np.load(prefix + "start_points.npy")
+    final_points = np.load(prefix + "optimized.npy")
+    reference = np.load(prefix + "target_points.npy")
     
-    plot_points(reference)
-    plot_points(start_points)
-    plot_points(final_points)
+    
+    mask = np.all((final_points >= -1) & (final_points <= 1), axis=1)
+    final_points = final_points[mask]
+    plot_points_and_diagram(reference)
+    #plt.savefig(prefix + "target_points.png")
+    plot_points_and_diagram(start_points)
+    #plt.savefig(prefix + "start_points.png")
+    plot_points_and_diagram(final_points)
+    #plt.savefig(prefix + "optimized.png")
     print(hausdorff_distance(reference, final_points))
     print(bottleneck_distance(reference, final_points))
