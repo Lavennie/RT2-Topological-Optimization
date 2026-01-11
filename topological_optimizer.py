@@ -16,7 +16,7 @@ class TopologicalOptimizer:
         extend=True,
         round_robin=False,
         target_cloud=None,
-        homology_group_dim=-1. # negative homology will optimize both dimension (0 and 1)
+        homology_group_dim=-1.0,  # negative homology will optimize both dimension (0 and 1)
     ):
         self.points = points.astype(np.float64)
         self.lr = learning_rate
@@ -64,9 +64,12 @@ class TopologicalOptimizer:
             return persistences
         return persistences[np.argpartition(persistences[:, 0], 0)[-k:]]
 
-    def optimize_rips_iterator(self, points, birth_death, epoch):
-        points, birth_edge, death_edge, max_pers = self.optimize_rips_step(points, epoch)
+    def optimize_rips_iterator(self, points, bi, epoch):
+        points, birth_edge, death_edge, max_pers = self.optimize_rips_step(
+            points, epoch
+        )
         return points, [birth_edge, death_edge]
+
     def optimize_rips_step(self, points, epoch):
         """
         Single step that optimizes the point cloud:
@@ -80,8 +83,12 @@ class TopologicalOptimizer:
         # Get persistence pairs for H_k
         persistence = st.persistence()
         # choose or retrieve the homology group to optimize
-        hom_grp_dim = self.homology_group_dim if self.homology_group_dim >= 0 else np.random.randint(0, 2)
-        
+        hom_grp_dim = (
+            self.homology_group_dim
+            if self.homology_group_dim >= 0
+            else np.random.randint(0, 2)
+        )
+
         hk_features = [
             (birth, death)
             for dim, (birth, death) in persistence
@@ -114,9 +121,7 @@ class TopologicalOptimizer:
                 self.target_persistence
             ):  # feature to transform into one of the reference features
                 # Choose whether to shorten or lengthen the feature
-                self.extend = (
-                    max_pers < self.target_persistence[self.feature_index, 0]
-                )
+                self.extend = max_pers < self.target_persistence[self.feature_index, 0]
             else:
                 # Contract any other holes that exist
                 self.extend = False
@@ -165,7 +170,9 @@ class TopologicalOptimizer:
 
         # it is normal for H0 to not have a birth edge (birth vertex, but that's not useful), don't end optimization
         if hom_grp_dim > 0 and birth_edge is None or death_edge is None:
-            print(f"Epoch {epoch}, H{hom_grp_dim}: Could not find critical edges: birth={birth_edge}, death={death_edge}. Skipping.")
+            print(
+                f"Epoch {epoch}, H{hom_grp_dim}: Could not find critical edges: birth={birth_edge}, death={death_edge}. Skipping."
+            )
             return (points, None, None, max_pers)
 
         # Gradient descent
@@ -205,7 +212,7 @@ class TopologicalOptimizer:
 
         # Clamp the point positions to [-1,1]
         points = np.clip(points, -1, 1)
-        
+
         return (points, birth_edge, death_edge, max_pers)
 
     def optimize_rips_topology(self, points, epochs=50, lr=0.02):
@@ -213,10 +220,12 @@ class TopologicalOptimizer:
         Optimizes the point cloud to prolong the dominant feature.
         Includes intermediate visualizations.
         """
-        
+
         for epoch in range(epochs):
-            points, birth_edge, death_edge, max_pers = self.optimize_rips_step(points, epoch)
-            
+            points, birth_edge, death_edge, max_pers = self.optimize_rips_step(
+                points, epoch
+            )
+
             if epoch % 10 == 0:
                 print(f"Epoch {epoch}: Max Persistence = {max_pers:.4f}")
                 visualize_step(points, birth_edge, death_edge, epoch)
@@ -302,26 +311,23 @@ if __name__ == "__main__":
     np.random.seed(42)
     reference = circle_noise(100)
     points = random_points(100)
-    
+
     opt = TopologicalOptimizer(
         points,
         learning_rate=0.02,
         extend=True,
         round_robin=False,
         target_cloud=reference,
-        homology_group_dim=-1
+        homology_group_dim=-1,
     )
-    final_points = point_cloud_persistence_anim(points, opt.optimize_rips_iterator, 100, "point_cloud.mp4", 200, extra_param=[], extra_display="birth death")
-    
-    #np.save("start_points.npy", points)
-    #np.save("target_points.npy", reference)
-    #np.save("optimized.npy", final_points)
-    #print(hausdorff_distance(reference, final_points))
-    #print(bottleneck_distance(reference, final_points))
-    
-    #print("Starting optimization...")
-    #target_info = opt.optimize_rips_topology(
-    #    points=points, epochs=500
-    #)
+    final_points = point_cloud_persistence_anim(
+        points,
+        opt.optimize_rips_iterator,
+        100,
+        "point_cloud.mp4",
+        200,
+        extra_param=[],
+        extra_display="birth death",
+    )
 
     print("Done.")

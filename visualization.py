@@ -6,16 +6,18 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 
 MAX_RANGE = np.sqrt(3)
+
+
 # compute the persitance diagram of the points
 def persistence_diagram(points):
     """
     Calculate the persistance diagram of the given poin cloud via the Rips filtration.
-    
+
     Parameters
     ----------
         points : ndarray of shape (N, 2)
             Starting point positions.
-            
+
     Returns
     -------
     list of ndarray
@@ -23,7 +25,9 @@ def persistence_diagram(points):
         result[0] corresponds to H0, result[1] to H1.
     """
     result = ripser(points, maxdim=1)
-    return result['dgms']
+    return result["dgms"]
+
+
 def plot_points(points, show=True):
     """
     Plot a 2D point cloud.
@@ -40,12 +44,14 @@ def plot_points(points, show=True):
     -------
     None
     """
-    plt.plot(points[:, 0], points[:, 1], '.', color='black')
+    plt.plot(points[:, 0], points[:, 1], ".", color="black")
     plt.xlim(-1, 1)
     plt.ylim(-1, 1)
-    plt.gca().set_aspect('equal', adjustable='box')
+    plt.gca().set_aspect("equal", adjustable="box")
     if show:
         plt.show()
+
+
 def plot_diagram(diagram, max_val=MAX_RANGE):
     """
     Plot a persistence diagram with fixed axis bounds.
@@ -62,11 +68,13 @@ def plot_diagram(diagram, max_val=MAX_RANGE):
     None
     """
     plot_diagrams(diagram, xy_range=[0, max_val, 0, max_val])
+
+
 def plot_points_and_diagram(points, max_val=MAX_RANGE):
     diagram = persistence_diagram(points)
-    
+
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    ax[0].set_title("Point Cloud")  
+    ax[0].set_title("Point Cloud")
     ax[0].set_xlim(-1, 1)
     ax[0].set_ylim(-1, 1)
     ax[0].scatter(points[:, 0], points[:, 1], s=10, c="gray")
@@ -83,7 +91,11 @@ def plot_points_and_diagram(points, max_val=MAX_RANGE):
     h1[np.isinf(h1)] = max_val
     ax[1].scatter(h0[:, 0], h0[:, 1], c="blue", label="H0")
     ax[1].scatter(h1[:, 0], h1[:, 1], c="orange", label="H1")
-def persistence_diagram_anim(points, iter_func, repeat_count, file, duration, max_val=MAX_RANGE, extra_param=None):
+
+
+def persistence_diagram_anim(
+    points, iter_func, repeat_count, file, duration, max_val=MAX_RANGE, extra_param=None
+):
     """
     Animate the evolution of a persistence diagram under an iterative point update.
 
@@ -111,43 +123,44 @@ def persistence_diagram_anim(points, iter_func, repeat_count, file, duration, ma
     ax.set_ylim(0, max_val)
     ax.set_aspect("equal")
     ax.set_title("Rips Filtration")
-    
-    ax.plot([0, max_val], [0, max_val], '--', color='black', alpha=0.4, linewidth=1)
-    
+
+    ax.plot([0, max_val], [0, max_val], "--", color="black", alpha=0.4, linewidth=1)
+
     scat_h0 = ax.scatter([], [], c="blue", label="H0")
     scat_h1 = ax.scatter([], [], c="orange", label="H1")
     ax.legend(loc="lower right")
-    
+
     points = points.copy()
-    
+
     def update(frame):
         nonlocal points
         nonlocal extra_param
         if frame % 100 == 0:
-            print(frame, '/', repeat_count)
-        
+            print(frame, "/", repeat_count)
+
         diagram = persistence_diagram(points)
         if extra_param is None:
-            points = iter_func(points, frame) 
+            points = iter_func(points, frame)
         else:
             points, extra_param = iter_func(points, extra_param, frame)
-        
+
         if len(diagram[0]) > 0:
             scat_h0.set_offsets(diagram[0])
         else:
             scat_h0.set_offsets(np.empty((0, 2)))
-            
+
         if len(diagram) > 0 and len(diagram[1]) > 0:
             scat_h1.set_offsets(diagram[1])
         else:
             scat_h1.set_offsets(np.empty((0, 2)))
-        
+
         ax.set_title(f"Persistence diagram ≤ {frame}")
         return scat_h0, scat_h1
-    
+
     anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
     anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
-    
+
+
 def point_cloud_anim(points, iter_func, repeat_count, file, duration, centroids=None):
     """
     Animate the evolution of a point cloud under an iterative point update.
@@ -174,34 +187,45 @@ def point_cloud_anim(points, iter_func, repeat_count, file, duration, centroids=
     ax.set_ylim(-1, 1)
     ax.set_aspect("equal")
     ax.set_title("Rips Filtration")
-    
+
     scat = ax.scatter([], [], c="blue", label="Points")
     if centroids is not None:
         scat_cent = ax.scatter([], [], c="orange", label="Centroids")
     ax.legend(loc="lower right")
-    
+
     points = points.copy()
-    
+
     def update(frame):
         nonlocal points
         nonlocal centroids
         if frame % 100 == 0:
-            print(frame, '/', repeat_count)
-        
+            print(frame, "/", repeat_count)
+
         scat.set_offsets(points)
         ax.set_title(f"Point cloud {frame}")
-        
+
         if centroids is None:
-            points = iter_func(points, frame) 
+            points = iter_func(points, frame)
             return scat
         else:
             scat_cent.set_offsets(centroids)
             points, centroids = iter_func(points, centroids, frame)
             return scat, scat_cent
-    
+
     anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
     anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
-def point_cloud_persistence_anim(points, iter_func, repeat_count, file, duration, extra_param=None, max_val=MAX_RANGE, extra_display="centroids"):
+
+
+def point_cloud_persistence_anim(
+    points,
+    iter_func,
+    repeat_count,
+    file,
+    duration,
+    extra_param=None,
+    max_val=MAX_RANGE,
+    extra_display="centroids",
+):
     """
     Animate the evolution of a point cloud under an iterative point update.
 
@@ -223,13 +247,13 @@ def point_cloud_persistence_anim(points, iter_func, repeat_count, file, duration
     None
     """
     history = []
-    
+
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    ax[0].set_title("Point Cloud")  
+    ax[0].set_title("Point Cloud")
     ax[0].set_xlim(-1, 1)
     ax[0].set_ylim(-1, 1)
     scat = ax[0].scatter([], [], s=10, c="gray", label="Points")
-    
+
     ax[1].set_title("Persistence Diagram")
     ax[1].set_xlim(0, max_val)
     ax[1].set_ylim(0, max_val)
@@ -239,41 +263,40 @@ def point_cloud_persistence_anim(points, iter_func, repeat_count, file, duration
     scat_h0 = ax[1].scatter([], [], c="blue", label="H0")
     scat_h1 = ax[1].scatter([], [], c="orange", label="H1")
     ax[1].legend(loc="lower right")
-    
-    
+
     if extra_param is not None:
         if extra_display == "centroids":
             scat_extra = ax[0].scatter([], [], c="red", label="Centroids")
         elif extra_display == "birth death":
-            scat_birth, = ax[0].plot([], [], "g--", linewidth=3, label="Birth Edge")
-            scat_death, = ax[0].plot([], [], "r--", linewidth=3, label="Death Edge")
-    
+            (scat_birth,) = ax[0].plot([], [], "g--", linewidth=3, label="Birth Edge")
+            (scat_death,) = ax[0].plot([], [], "r--", linewidth=3, label="Death Edge")
+
     points = points.copy()
-    
+
     def update(frame):
         nonlocal points
         nonlocal extra_param
         if frame % 100 == 0:
-            print(frame, '/', repeat_count)
-        
+            print(frame, "/", repeat_count)
+
         scat.set_offsets(points)
         ax[0].set_title(f"Point Cloud {frame}")
-        
+
         diagram = persistence_diagram(points)
-        
+
         # draw component features
         if len(diagram[0]) > 0:
             scat_h0.set_offsets(diagram[0])
         else:
             scat_h0.set_offsets(np.empty((0, 2)))
-        # draw hole features    
+        # draw hole features
         if len(diagram) > 0 and len(diagram[1]) > 0:
             scat_h1.set_offsets(diagram[1])
         else:
             scat_h1.set_offsets(np.empty((0, 2)))
-            
+
         if extra_param is None:
-            points = iter_func(points, frame) 
+            points = iter_func(points, frame)
             return scat, scat_h0, scat_h1
         else:
             if extra_display == "centroids":
@@ -284,20 +307,27 @@ def point_cloud_persistence_anim(points, iter_func, repeat_count, file, duration
                 points2, extra_param = iter_func(points, extra_param, frame)
                 # birth/death edges are meant to be drawn on the frame that was used for calculation
                 if extra_param[0] is not None:
-                    scat_birth.set_data([points[extra_param[0][0], 0], points[extra_param[0][1], 0]], [points[extra_param[0][0], 1], points[extra_param[0][1], 1]])
+                    scat_birth.set_data(
+                        [points[extra_param[0][0], 0], points[extra_param[0][1], 0]],
+                        [points[extra_param[0][0], 1], points[extra_param[0][1], 1]],
+                    )
                 else:
                     scat_birth.set_data([], [])
                 if extra_param[1] is not None:
-                    scat_death.set_data([points[extra_param[1][0], 0], points[extra_param[1][1], 0]], [points[extra_param[1][0], 1], points[extra_param[1][1], 1]])
+                    scat_death.set_data(
+                        [points[extra_param[1][0], 0], points[extra_param[1][1], 0]],
+                        [points[extra_param[1][0], 1], points[extra_param[1][1], 1]],
+                    )
                 else:
                     scat_death.set_data([], [])
                 return scat, scat_birth, scat_death, scat_h0, scat_h1
-    
+
     anim = FuncAnimation(fig, update, frames=repeat_count, interval=400)
     anim.save(file, writer=FFMpegWriter(fps=repeat_count / duration))
     plt.show()
     return points
-    
+
+
 def rips_anim_steps(points, file, duration):
     """
     Animate the Rips filtration by stepping through discrete filtration values.
@@ -320,38 +350,40 @@ def rips_anim_steps(points, file, duration):
     rips = gd.RipsComplex(points=points, max_edge_length=MAX_RANGE)
     simplex_tree = rips.create_simplex_tree(max_dimension=2)
     simplices = list(simplex_tree.get_filtration())
-        
+
     simpl_by_f = dict()
     for s, f in simplices:
         if not f in simpl_by_f:
             simpl_by_f[f] = []
         simpl_by_f[f].append(s)
-     
+
     filtration_values = sorted(simpl_by_f.keys())
-    
+
     fig, ax = plt.subplots()
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_aspect("equal")
     ax.set_title("Rips Filtration")
     ax.scatter(points[:, 0], points[:, 1], color="black")
-    
-    
+
     edge_lines = []
     triangle_patches = []
-    circle_patches = [plt.Circle(p, 0, fill=False, color='blue', alpha=0.3, linewidth=1.5) for p in points]
+    circle_patches = [
+        plt.Circle(p, 0, fill=False, color="blue", alpha=0.3, linewidth=1.5)
+        for p in points
+    ]
     for c in circle_patches:
         ax.add_patch(c)
-    
+
     def update(frame):
         if frame % 100 == 0:
-            print(frame, '/', len(filtration_values))
+            print(frame, "/", len(filtration_values))
         f = filtration_values[frame]
-        
+
         # udpdate circle radius
         for c in circle_patches:
             c.set_radius(f)
-        
+
         # remove previous frame's edges/triangles
         for l in edge_lines:
             l.remove()
@@ -359,26 +391,35 @@ def rips_anim_steps(points, file, duration):
         for t in triangle_patches:
             t.remove()
         triangle_patches.clear()
-    
+
         # draw simplices up to current filtration value
-        for fv in filtration_values[:frame + 1]:
+        for fv in filtration_values[: frame + 1]:
             for s in simpl_by_f[fv]:
                 if len(s) == 2:  # edge
                     i, j = s
-                    line, = ax.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], color="green", alpha=0.7, linewidth=2)
+                    (line,) = ax.plot(
+                        [points[i, 0], points[j, 0]],
+                        [points[i, 1], points[j, 1]],
+                        color="green",
+                        alpha=0.7,
+                        linewidth=2,
+                    )
                     edge_lines.append(line)
                 elif len(s) == 3:  # triangle
                     i, j, k = s
-                    tri = plt.Polygon([points[i], points[j], points[k]], color="orange", alpha=0.25)
+                    tri = plt.Polygon(
+                        [points[i], points[j], points[k]], color="orange", alpha=0.25
+                    )
                     ax.add_patch(tri)
                     triangle_patches.append(tri)
-    
+
         ax.set_title(f"Rips Filtration ≤ {f:.3f}")
         return edge_lines + triangle_patches + circle_patches
-    
+
     anim = FuncAnimation(fig, update, frames=len(filtration_values), interval=400)
     anim.save(file, writer=FFMpegWriter(fps=len(filtration_values) / duration))
-    
+
+
 def rips_anim_smooth(points, file, duration):
     """
     Animate the Rips filtration with smooth ball growth.
@@ -402,40 +443,42 @@ def rips_anim_smooth(points, file, duration):
     rips = gd.RipsComplex(points=points, max_edge_length=MAX_RANGE)
     simplex_tree = rips.create_simplex_tree(max_dimension=2)
     simplices = list(simplex_tree.get_filtration())
-        
+
     simpl_by_f = dict()
     for s, f in simplices:
         if not f in simpl_by_f:
             simpl_by_f[f] = []
         simpl_by_f[f].append(s)
-     
+
     filtration_values = sorted(simpl_by_f.keys())
     max_filtration = filtration_values[-1]
-    
+
     fig, ax = plt.subplots()
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_aspect("equal")
     ax.set_title("Rips Filtration")
     ax.scatter(points[:, 0], points[:, 1], color="black")
-    
-    
+
     edge_lines = []
     triangle_patches = []
-    circle_patches = [plt.Circle(p, 0, fill=False, color='blue', alpha=0.3, linewidth=1.5) for p in points]
+    circle_patches = [
+        plt.Circle(p, 0, fill=False, color="blue", alpha=0.3, linewidth=1.5)
+        for p in points
+    ]
     for c in circle_patches:
         ax.add_patch(c)
-    
+
     def update(frame):
         if frame % 100 == 0:
-            print(frame, '/', len(filtration_values))
+            print(frame, "/", len(filtration_values))
         t = frame / len(filtration_values)
         radius = t * max_filtration
-        
+
         # udpdate circle radius
         for c in circle_patches:
             c.set_radius(radius)
-        
+
         # remove previous frame's edges/triangles
         for l in edge_lines:
             l.remove()
@@ -443,7 +486,7 @@ def rips_anim_smooth(points, file, duration):
         for t in triangle_patches:
             t.remove()
         triangle_patches.clear()
-    
+
         # draw simplices up to current filtration value
         for fv in filtration_values:
             if fv > radius:
@@ -451,20 +494,28 @@ def rips_anim_smooth(points, file, duration):
             for s in simpl_by_f[fv]:
                 if len(s) == 2:  # edge
                     i, j = s
-                    line, = ax.plot([points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], color="green", alpha=0.7, linewidth=2)
+                    (line,) = ax.plot(
+                        [points[i, 0], points[j, 0]],
+                        [points[i, 1], points[j, 1]],
+                        color="green",
+                        alpha=0.7,
+                        linewidth=2,
+                    )
                     edge_lines.append(line)
                 elif len(s) == 3:  # triangle
                     i, j, k = s
-                    tri = plt.Polygon([points[i], points[j], points[k]], color="orange", alpha=0.25)
+                    tri = plt.Polygon(
+                        [points[i], points[j], points[k]], color="orange", alpha=0.25
+                    )
                     ax.add_patch(tri)
                     triangle_patches.append(tri)
-    
+
         ax.set_title(f"Rips Filtration: ≤ {radius:.3f}")
         return edge_lines + triangle_patches + circle_patches
-    
+
     anim = FuncAnimation(fig, update, frames=len(filtration_values), interval=400)
     anim.save(file, writer=FFMpegWriter(fps=len(filtration_values) / duration))
-    
 
-#persistence_diagram_anim(random_points(30), lambda x, _: x*0.9, 10, "persistance_diagram.mp4", 10)
-#rips_anim_smooth(random_points(30), "rips_filtration_smooth.mp4", 10)
+
+# persistence_diagram_anim(random_points(30), lambda x, _: x*0.9, 10, "persistance_diagram.mp4", 10)
+# rips_anim_smooth(random_points(30), "rips_filtration_smooth.mp4", 10)
