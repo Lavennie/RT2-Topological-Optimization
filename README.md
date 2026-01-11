@@ -25,4 +25,4 @@ The rest of the files contain either helper methods and structures or visualizat
 
 ## Animations
 
-The animations we obtained in our research are available in the `animations` folder.
+The animations and plots we obtained in our research are available under the `resources` folder.
