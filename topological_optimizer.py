@@ -10,11 +10,12 @@ class TopologicalOptimizer:
     def __init__(
         self,
         points,
-        learning_rate=0.01,
+        learning_rate=0.02,
         momentum=0.9,
         extend=True,
         round_robin=False,
         target_cloud=None,
+        homology_group_dim=-1. # negative homology will optimize both dimension (0 and 1)
     ):
         self.points = points.astype(np.float64)
         self.lr = learning_rate
@@ -23,11 +24,16 @@ class TopologicalOptimizer:
         self.extend = extend
         self.round_robin = round_robin
         self.feature_index = 0
-        diagrams = persistence_diagram(target_cloud)[1]
-        diagrams = np.array(
-            [(death - birth, birth, death) for birth, death in diagrams]
-        )
-        self.target_persistence = diagrams  # self.significant_features(diagrams)
+        self.homology_group_dim = homology_group_dim
+        self.lr = learning_rate
+        if target_cloud is not None:
+            diagrams = persistence_diagram(target_cloud)[1]
+            diagrams = np.array(
+                [(death - birth, birth, death) for birth, death in diagrams]
+            )
+            self.target_persistence = diagrams
+        else:
+            self.target_persistence = None
 
     def get_gradient_vector(self, p1, p2):
         """
@@ -57,140 +63,159 @@ class TopologicalOptimizer:
             return persistences
         return persistences[np.argpartition(persistences[:, 0], 0)[-k:]]
 
-    def optimize_rips_topology(self, points, homology_group_dim=1, epochs=50, lr=0.02):
+    def optimize_rips_iterator(self, points, birth_death, epoch):
+        points, birth_edge, death_edge, max_pers = self.optimize_rips_step(points, epoch)
+        return points, [birth_edge, death_edge]
+    def optimize_rips_step(self, points, epoch):
         """
-        Optimizes the point cloud to prolong the dominant H1 feature.
-        Includes intermediate visualizations.
+        Single step that optimizes the point cloud:
+            - optimizes the most significant feature (default) or
+            - optimizes significant featues in a round robin style (round_robin = True) or
+            - optimizes all features toward a target diagram (persistence_diagram != None).
         """
-        if homology_group_dim < 0:
-            raise ValueError("Homology group dimension must be >= 0")
-        print("Starting Optimization...")
+        rc = gudhi.RipsComplex(points=points)
+        st = rc.create_simplex_tree(max_dimension=2)
 
-        for epoch in range(epochs):
-            rc = gudhi.RipsComplex(points=points)
-            st = rc.create_simplex_tree(max_dimension=2)
+        # Get persistence pairs for H_k
+        persistence = st.persistence()
+        # choose or retrieve the homology group to optimize
+        hom_grp_dim = self.homology_group_dim if self.homology_group_dim >= 0 else np.random.randint(0, 2)
+        
+        hk_features = [
+            (birth, death)
+            for dim, (birth, death) in persistence
+            if dim == hom_grp_dim and death != float("inf")
+        ]
 
-            # Get persistence pairs for H_k
-            persistence = st.persistence()
-            hk_features = [
-                (birth, death)
-                for dim, (birth, death) in persistence
-                if dim == homology_group_dim and death != float("inf")
-            ]
+        # no need to optimize if there aren't any features
+        if len(hk_features) == 0:
+            print(f"Epoch {epoch}: No H{hom_grp_dim} features found. Adding noise.")
+            points += np.random.normal(0, 0.01, points.shape)
+            return (points, None, None, 0)
 
-            if len(hk_features) == 0:
-                print(f"Epoch {epoch}: No H1 features found. Adding noise.")
-                points += np.random.normal(0, 0.01, points.shape)
-                continue
-
-            # Find the most persistent feature or pick the significant ones in
-            persistences = np.array(
-                [(death - birth, birth, death) for birth, death in hk_features]
-            )
-            #
-            if self.target_persistence is not None:
-                if len(self.target_persistence) == 0:
-                    raise Exception(
-                        "Target persistence does not have any significant features."
-                    )
-                # These will be transformed in to the target features in a round robin style
-                persistences = self.sort_persistences(persistences)
-                # largest = self.largest_features(persistences, len(self.target_persistence))
-                # self.feature_index = self.feature_index % len(persistences) # Loop around back to the first feature
-                self.feature_index = np.random.randint(0, len(persistences))
-                max_pers, birth_time, death_time = persistences[self.feature_index, :]
-                if self.feature_index < len(
-                    self.target_persistence
-                ):  # feature to transform into one of the reference features
-                    # Choose whether to shorten or lengthen the feature
-                    self.extend = (
-                        max_pers < self.target_persistence[self.feature_index, 0]
-                    )
-                else:
-                    # Contract any other holes that exist
-                    self.extend = False
-
-                # max_pers, birth_time, death_time = largest[np.argpartition(largest[:, 0], 0)[-self.feature_index - 1], :]
-                self.feature_index += 1
-            elif self.round_robin:
-                # Modify only significant features swapping among them in a round robin fashion
-                significant = self.significant_features(
-                    persistences
-                )  # 0.1 is some arbitrary cutoff
-                if len(significant) == 0:
-                    significant = np.array(
-                        [persistences[0, :]]
-                    )  # Just take one diagram randomly and modify it
-                self.feature_index = self.feature_index % len(
-                    significant
-                )  # Loop around back to the first feature
-                max_pers, birth_time, death_time = significant[
-                    np.argpartition(significant[:, 0], 0)[-self.feature_index - 1], :
-                ]
-                self.feature_index += 1
+        # Find the most persistent feature or pick the significant ones in
+        persistences = np.array(
+            [(death - birth, birth, death) for birth, death in hk_features]
+        )
+        # Optimize toward another persistence diagram, picks a random feature
+        if self.target_persistence is not None:
+            if len(self.target_persistence) == 0:
+                raise Exception(
+                    "Target persistence does not have any significant features."
+                )
+            # These will be transformed in to the target features in a round robin style
+            persistences = self.sort_persistences(persistences)
+            # largest = self.largest_features(persistences, len(self.target_persistence))
+            # self.feature_index = self.feature_index % len(persistences) # Loop around back to the first feature
+            self.feature_index = np.random.randint(0, len(persistences))
+            max_pers, birth_time, death_time = persistences[self.feature_index, :]
+            if self.feature_index < len(
+                self.target_persistence
+            ):  # feature to transform into one of the reference features
+                # Choose whether to shorten or lengthen the feature
+                self.extend = (
+                    max_pers < self.target_persistence[self.feature_index, 0]
+                )
             else:
-                max_pers, birth_time, death_time = max(persistences, key=lambda x: x[0])
+                # Contract any other holes that exist
+                self.extend = False
 
-            # Find edges at birth and death times
-            # Get all edges (1-simplices) from the filtration
-            simplices_1 = [
-                simplex for simplex, filt in st.get_filtration() if len(simplex) == 2
+            # max_pers, birth_time, death_time = largest[np.argpartition(largest[:, 0], 0)[-self.feature_index - 1], :]
+            self.feature_index += 1
+        # Modify only significant features swapping among them in a round robin fashion
+        elif self.round_robin:
+            significant = self.significant_features(
+                persistences
+            )  # 0.1 is some arbitrary cutoff
+            if len(significant) == 0:
+                significant = np.array(
+                    [persistences[0, :]]
+                )  # Just take one diagram randomly and modify it
+            self.feature_index = self.feature_index % len(
+                significant
+            )  # Loop around back to the first feature
+            max_pers, birth_time, death_time = significant[
+                np.argpartition(significant[:, 0], 0)[-self.feature_index - 1], :
             ]
+            self.feature_index += 1
+        # Optimize the most significant feature
+        else:
+            max_pers, birth_time, death_time = max(persistences, key=lambda x: x[0])
 
-            # Find birth edge (first edge to appear at birth_time)
-            birth_edge = None
-            for simplex in simplices_1:
-                if abs(st.filtration(simplex) - birth_time) < 1e-9:
-                    birth_edge = tuple(simplex)
-                    break
+        # Find edges at birth and death times
+        # Get all edges (1-simplices) from the filtration
+        simplices_1 = [
+            simplex for simplex, filt in st.get_filtration() if len(simplex) == 2
+        ]
 
-            # Find death edge (edge that closes the loop at death_time)
-            death_edge = None
-            for simplex in simplices_1:
-                if abs(st.filtration(simplex) - death_time) < 1e-9:
-                    death_edge = tuple(simplex)
-                    break
+        # Find birth edge (first edge to appear at birth_time)
+        birth_edge = None
+        for simplex in simplices_1:
+            if abs(st.filtration(simplex) - birth_time) < 1e-9:
+                birth_edge = tuple(simplex)
+                break
 
-            if birth_edge is None or death_edge is None:
-                print(f"Epoch {epoch}: Could not find critical edges. Skipping.")
-                continue
+        # Find death edge (edge that closes the loop at death_time)
+        death_edge = None
+        for simplex in simplices_1:
+            if abs(st.filtration(simplex) - death_time) < 1e-9:
+                death_edge = tuple(simplex)
+                break
 
-            # Gradient descent
+        # it is normal for H0 to not have a birth edge (birth vertex, but that's not useful), don't end optimization
+        if hom_grp_dim > 0 and birth_edge is None or death_edge is None:
+            print(f"Epoch {epoch}, H{hom_grp_dim}: Could not find critical edges: birth={birth_edge}, death={death_edge}. Skipping.")
+            return (points, None, None, max_pers)
+
+        # Gradient descent
+        if birth_edge is not None:
             bu, bv = birth_edge
-            du, dv = death_edge
+        du, dv = death_edge
 
-            grad_accum = np.zeros_like(points)
+        grad_accum = np.zeros_like(points)
 
-            if self.extend:
-                # Target Feature: Linear force
-                force_magnitude = 1.0
-                direction = 1
-            else:
-                # Noise Feature: Square force (scale by persistence)
-                current_persistence = death_time - birth_time
-                force_magnitude = 2.0 * current_persistence
-                direction = -1
+        if self.extend:
+            # Target Feature: Linear force
+            force_magnitude = 1.0
+            direction = 1
+        else:
+            # Noise Feature: Square force (scale by persistence)
+            current_persistence = death_time - birth_time
+            force_magnitude = 2.0 * current_persistence
+            direction = -1
 
-            # Birth Edge Update
+        # Birth Edge Update
+        if birth_edge is not None:
             dir_b, dist_b = self.get_gradient_vector(points[bu], points[bv])
             # If direction is 1 (target): contract birth (move bu -> bv)
             # If direction is -1 (noise): expand birth (move bu <- bv)
             grad_accum[bu] -= dir_b * direction * force_magnitude
             grad_accum[bv] += dir_b * direction * force_magnitude
 
-            # Death Edge Update
-            dir_d, dist_d = self.get_gradient_vector(points[du], points[dv])
-            # If direction is 1 (target): expand death (move du <- dv)
-            # If direction is -1 (noise): contract death (move du -> dv)
-            grad_accum[du] += dir_d * direction * force_magnitude
-            grad_accum[dv] -= dir_d * direction * force_magnitude
+        # Death Edge Update
+        dir_d, dist_d = self.get_gradient_vector(points[du], points[dv])
+        # If direction is 1 (target): expand death (move du <- dv)
+        # If direction is -1 (noise): contract death (move du -> dv)
+        grad_accum[du] += dir_d * direction * force_magnitude
+        grad_accum[dv] -= dir_d * direction * force_magnitude
 
-            # Apply updates
-            points += lr * grad_accum
+        # Apply updates
+        points += self.lr * grad_accum
 
-            # Clamp the point positions to [-1,1]
-            points = np.clip(points, -1, 1)
+        # Clamp the point positions to [-1,1]
+        points = np.clip(points, -1, 1)
+        
+        return (points, birth_edge, death_edge, max_pers)
 
+    def optimize_rips_topology(self, points, epochs=50, lr=0.02):
+        """
+        Optimizes the point cloud to prolong the dominant feature.
+        Includes intermediate visualizations.
+        """
+        
+        for epoch in range(epochs):
+            points, birth_edge, death_edge, max_pers = self.optimize_rips_step(points, epoch)
+            
             if epoch % 10 == 0:
                 print(f"Epoch {epoch}: Max Persistence = {max_pers:.4f}")
                 visualize_step(points, birth_edge, death_edge, epoch)
@@ -277,19 +302,22 @@ if __name__ == "__main__":
     # points = np.random.random((50, 2))
     points = circle_noise(100)
     reference = infinity_noise(100)
+    
     plot_diagram(persistence_diagram(reference))
 
     opt = TopologicalOptimizer(
         points,
-        learning_rate=0.5,
-        extend=False,
-        round_robin=True,
+        learning_rate=0.02,
+        extend=True,
+        round_robin=False,
         target_cloud=reference,
+        homology_group_dim=-1
     )
+    point_cloud_persistence_anim(points, opt.optimize_rips_iterator, 50, "point_cloud.mp4", 20, extra_param=[], extra_display="birth death")
 
     print("Starting optimization...")
-    target_info = opt.optimize_rips_topology(
-        points=points, homology_group_dim=1, epochs=1000
-    )
+    #target_info = opt.optimize_rips_topology(
+    #    points=points, epochs=500
+    #)
 
     print("Done.")

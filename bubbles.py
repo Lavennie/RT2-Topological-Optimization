@@ -167,11 +167,13 @@ def effervescence(points, centroids, frame):
         points[mask] = spread(centroids[i, :], bloat(centroids[i, :], points[mask]))
     return points, centroids
 
-centroid_count = 2
-points = infinity_noise(100)
-centroids = get_centroids(points, centroid_count)
-clustering = cluster(points, centroids)
-plot_points(points)
-
-point_cloud_anim(points, effervescence, 100, "point_cloud.mp4", 5, centroids=centroids)
-persistence_diagram_anim(points, effervescence, 100, "persistence_diagram.mp4", 10, extra_param=centroids)
+if __name__ == "__main__":
+    centroid_count = 2
+    points = square_noise(100)
+    centroids = get_centroids(points, centroid_count)
+    clustering = cluster(points, centroids)
+    plot_points_and_diagram(points)
+    
+    point_cloud_persistence_anim(points, effervescence, 100, "point_cloud.mp4", 5, extra_param=centroids)
+    #point_cloud_anim(points, effervescence, 100, "point_cloud.mp4", 5, centroids=centroids)
+    #persistence_diagram_anim(points, effervescence, 100, "persistence_diagram.mp4", 10, extra_param=centroids)
