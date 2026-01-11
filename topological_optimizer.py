@@ -300,9 +300,8 @@ def visualize_step(points, birth_edge, death_edge, epoch, title="Optimization"):
 
 if __name__ == "__main__":
     np.random.seed(42)
-    # points = np.random.random((50, 2))
-    points = circle_noise(100)
-    reference = infinity_noise(100)
+    reference = circle_noise(100)
+    points = random_points(100)
     
     opt = TopologicalOptimizer(
         points,
@@ -312,13 +311,13 @@ if __name__ == "__main__":
         target_cloud=reference,
         homology_group_dim=-1
     )
-    final_points = point_cloud_persistence_anim(points, opt.optimize_rips_iterator, 50, "point_cloud.mp4", 20, extra_param=[], extra_display="birth death")
+    final_points = point_cloud_persistence_anim(points, opt.optimize_rips_iterator, 100, "point_cloud.mp4", 200, extra_param=[], extra_display="birth death")
     
-    np.save("start_points.npy", points)
-    np.save("target_points.npy", reference)
-    np.save("optimized.npy", final_points)
-    print(hausdorff_distance(reference, final_points))
-    print(bottleneck_distance(reference, final_points))
+    #np.save("start_points.npy", points)
+    #np.save("target_points.npy", reference)
+    #np.save("optimized.npy", final_points)
+    #print(hausdorff_distance(reference, final_points))
+    #print(bottleneck_distance(reference, final_points))
     
     #print("Starting optimization...")
     #target_info = opt.optimize_rips_topology(
